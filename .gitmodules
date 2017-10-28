@@ -1,0 +1,3 @@
+[submodule "sfbay_potw"]
+	path = sfbay_potw
+	url = https://github.com/rustychris/sfbay_potw.git
