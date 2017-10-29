@@ -61,246 +61,339 @@ PC=waq_scenario.ParameterConstant
 Sub=waq_scenario.Substance
 IC=waq_scenario.Initial
 
+
+def parse_substance_file(fn,substance_cb=None,
+                         parameter_cb=None,process_cb=None,
+                         output_cb=None):
+    with open(fn,'r') as fp:
+        gen=dio.inp_tok(fp)
+        tok=lambda: next(gen)
+
+        def nv_pairs(stop_on):
+            pairs={}
+            while 1:
+                tag=tok()
+                if tag==stop_on:
+                    break
+                else:
+                    # name-value pair
+                    name=tag
+                    value=tok().strip("'")
+                    pairs[name]=value
+            return pairs
+
+        while 1:
+            try:
+                blk=tok()
+            except StopIteration:
+                break
+            if blk=='substance':
+                sub_name=tok().strip("'")
+                activivity=tok()
+                sub_attrs=nv_pairs(stop_on='end-substance')
+                if substance_cb:
+                    substance_cb(name,active=(activity=='active'))
+                # scen.substances[name]=Substance(active=(activity=='active'))
+            elif blk=='parameter':
+                par_name=tok().strip("'")
+                par_attrs=nv_pairs(stop_on='end-parameter')
+                if 'value' in par_attrs:
+                    # scen.parameters[par_name]=PC(float(par_attrs['value']))
+                    pass
+                else:
+                    log.warning("Not sure how to deal with %s"%(par_attrs))
+                if parameter_cb:
+                    parameter_cb(par_name,par_attrs)
+            elif blk=='output':
+                out_var=tok().strip("'")
+                out_attrs=nv_pairs(stop_on='end-output')
+                # scen.map_output += (out_var,)
+                # scen.hist_output += (out_var,)
+                if output_cb:
+                    output_cb(out_var)
+            elif blk=='active-processes':
+                while 1:
+                    tag=tok()
+                    if tag=='end-active-processes':
+                        break
+                    elif tag=='name':
+                        proc_name=tok().strip("'")
+                        proc_desc=tok().strip("'")
+                        # scen.parameters['ACTIVE_%s'%proc_name]=1
+                        if process_cb:
+                            process_cb(proc_name)
+                    else:
+                        log.warning("What is %s"%tag)
+            else:
+                log.warning("Skipping %s"%blk)
+
+
 class BayDynamo(waq_scenario.Scenario):
     map_formats=['binary']
+    sub_files=['SFB_pars.sub']
     
+    def add_substances_from_sub(self,fn,subs):
+        def sub_cb(name,active):
+            subs[name]=Sub(active=active)
+        parse_substance_file(fn,substance_cb=sub_cb)
+    def add_parameters_from_sub(self,fn,params):
+        def param_cb(name,attrs):
+            params[name]=attrs['value']
+        def proc_cb(name):
+            params["ACTIVE_"+name]=1
+        parse_substance_file(fn,parameter_cb=param_cb,process_cb=proc_cb)
+    def add_outputs_from_sub(self,fn):
+        def output_cb(name):
+            self.map_output += (name,)
+            self.hist_output += (name,)
+            parse_substance_file(fn,output_cb=output_cb)
+            
     def init_substances(self):
         subs=super(BayDynamo,self).init_substances()
-        self.log.info('BayDynamo: init_substances()')
-        subs['Diat'] = Sub(initial=IC(default=1.0))
-        subs['Green'] = Sub(initial=IC(default=1.0))
-
-        subs['AAP']        = Sub()
-        subs['DetC']       = Sub()
-        subs['DetN']       = Sub()
-        subs['DetP']       = Sub()
-        subs['DetSi']      = Sub()
-
-        subs['NH4']        = Sub(initial=IC(default=0.2))
-        subs['NO3']        = Sub(initial=IC(default=1.1))
-        subs['PO4']        = Sub(initial=IC(default=0.1))
-        subs['Si']         = Sub(initial=IC(default=0.1))
-
-        subs['OOC']        = Sub(initial=IC(default=0.1))
-        subs['OON']        = Sub(initial=IC(default=0.1))
-        subs['OOP']        = Sub(initial=IC(default=0.1))
-        subs['OOSi']       = Sub(initial=IC(default=0.1))
-
-        subs['Continuity'] = Sub(initial=IC(default=1.0))
-        subs['OXY']        = Sub(initial=IC(default=14.0))
-
-        # inactive:
-        subs['AAPS1']      = Sub(initial=IC(default=0.0),active=False)  
-        subs['DetCS1']     = Sub(initial=IC(default=0.0),active=False)  
-        subs['DetNS1']     = Sub(initial=IC(default=0.0),active=False)  
-        subs['DetPS1']     = Sub(initial=IC(default=0.0),active=False)  
-        subs['DetSiS1']    = Sub(initial=IC(default=0.0),active=False)  
-        subs['OOCS1']      = Sub(initial=IC(default=0.0),active=False)  
-        subs['OONS1']      = Sub(initial=IC(default=0.0),active=False)  
-        subs['OOPS1']      = Sub(initial=IC(default=0.0),active=False)  
-        subs['OOSiS1']     = Sub(initial=IC(default=0.0),active=False)  
-        subs['SOD']        = Sub(initial=IC(default=0.0),active=False)  
+        for sub_fn in sub_files:
+            self.add_substances_from_sub(sub_fn,subs)
+            
+        # self.log.info('BayDynamo: init_substances()')
+        # subs['Diat'] = Sub(initial=IC(default=1.0))
+        # subs['Green'] = Sub(initial=IC(default=1.0))
+        # 
+        # subs['AAP']        = Sub()
+        # subs['DetC']       = Sub()
+        # subs['DetN']       = Sub()
+        # subs['DetP']       = Sub()
+        # subs['DetSi']      = Sub()
+        # 
+        # subs['NH4']        = Sub(initial=IC(default=0.2))
+        # subs['NO3']        = Sub(initial=IC(default=1.1))
+        # subs['PO4']        = Sub(initial=IC(default=0.1))
+        # subs['Si']         = Sub(initial=IC(default=0.1))
+        # 
+        # subs['OOC']        = Sub(initial=IC(default=0.1))
+        # subs['OON']        = Sub(initial=IC(default=0.1))
+        # subs['OOP']        = Sub(initial=IC(default=0.1))
+        # subs['OOSi']       = Sub(initial=IC(default=0.1))
+        # 
+        # subs['Continuity'] = Sub(initial=IC(default=1.0))
+        # subs['OXY']        = Sub(initial=IC(default=14.0))
+        # 
+        # # inactive:
+        # subs['AAPS1']      = Sub(initial=IC(default=0.0),active=False)  
+        # subs['DetCS1']     = Sub(initial=IC(default=0.0),active=False)  
+        # subs['DetNS1']     = Sub(initial=IC(default=0.0),active=False)  
+        # subs['DetPS1']     = Sub(initial=IC(default=0.0),active=False)  
+        # subs['DetSiS1']    = Sub(initial=IC(default=0.0),active=False)  
+        # subs['OOCS1']      = Sub(initial=IC(default=0.0),active=False)  
+        # subs['OONS1']      = Sub(initial=IC(default=0.0),active=False)  
+        # subs['OOPS1']      = Sub(initial=IC(default=0.0),active=False)  
+        # subs['OOSiS1']     = Sub(initial=IC(default=0.0),active=False)  
+        # subs['SOD']        = Sub(initial=IC(default=0.0),active=False)  
 
         return subs
 
     def init_parameters(self):       
-        """ exactly the parameters from baybloom.inp """
         params=super(BayDynamo,self).init_parameters()
-        self.log.info("Start of BayDynamo parameter defs")
 
-        params['ACTIVE_Phy_dyn']=PC(1)
-        params["ACTIVE_GroMrt_Gre"]=PC(1)
-        params["ACTIVE_GroMrt_Dia"]=PC(1)
-
-        params["ACTIVE_NutUpt_Alg"]=PC(1)
-        params["ACTIVE_NutRel_Alg"]=PC(1)
-        params["ACTIVE_SedDiat"]=PC(1)
-
-        # will these take care of light limitation?
-        params["ACTIVE_Rad_Green"]=PC(1)
-        params["ACTIVE_Rad_Diat"]=PC(1)
+        for sub_fn in sub_files:
+            self.add_parameters_from_sub(sub_fn,params)
         
-        params["ACTIVE_PPrLim"]=PC(1)
+        self.log.info("Start of BayDynamo parameter defs")
+                
+
+        # params['ACTIVE_Phy_dyn']=PC(1)
+        # params["ACTIVE_GroMrt_Gre"]=PC(1)
+        # params["ACTIVE_GroMrt_Dia"]=PC(1)
+        # 
+        # params["ACTIVE_NutUpt_Alg"]=PC(1)
+        # params["ACTIVE_NutRel_Alg"]=PC(1)
+        # params["ACTIVE_SedDiat"]=PC(1)
+
+        # # will these take care of light limitation?
+        # params["ACTIVE_Rad_Green"]=PC(1)
+        # params["ACTIVE_Rad_Diat"]=PC(1)
+        # 
+        # params["ACTIVE_PPrLim"]=PC(1)
 
 
         # below, these are mostly copied from baybloom
         params['NOTHREADS']=PC(0) # Use more than one processor if available
 
-        params['SWAdsP']=PC(0) # SWAdsP          switch PO4 adsorption <0=Kd|1=Langmuir|2=pHdep>
-        params['KdPO4AAP']=PC(0.5) # KdPO4AAP        distrib. coeff. (-) or ads. eq. const.          [-]
-        # params['VSedAAP']=PC(5.00000e-001 # VSedAAP         sedimentation velocity AAP                      [m/d]
-        params['MaxPO4AAP']=PC(1.50000e-001) # MaxPO4AAP       adsorption capacity TIM for PO4                 [-]
-        params['fSedIM1']=PC(0.25)         # fSedIM1         sedimentation flux IM1                          [-]
-        params['VxSedIM1']=PC(0.00000e+000) # VxSedIM1        sedimentation velocity IM1                      [m/d]
-
-        params['SWOxyProd']=PC(1) # SWOxyProd       switch on oxygen prod. (0=BLOOM, 1=VAROXY)      [-]
-
-        # Deleted a bunch of parameters related to specific BLOOM classes
-        
-        params['RcDetC']=PC(1.20000e-001) # RcDetC          first-order mineralisation rate DetC in layerS1 [d-1]
-        params['RcDetCHigh']=PC(1.80000e-001) # RcDetCHigh      maximum first-order mineralisation rate DetC    [d-1]
-        params['TcDetC']=PC(1.11000e+000) # TcDetC          temperature coefficient for mineralisation DetC [-]
-        params['CTMin']=PC(3.00000e+000) # CTMin           critical temperature for mineralisation         [oC]
-        params['NCMinLimH']=PC(1.50000e-001) # NCMinLimH       Upper limit limit N:C ratio detritus            [gN/gC]
-        params['NCMinLimL']=PC(1.00000e-001) # NCMinLimL       Lower limit limit N:C ratio detritus            [gN/gC]
-        params['PCMinLimH']=PC(1.50000e-002) # PCMinLimH       Upper limit limit P:C ratio detritus            [gP/gC]
-        params['PCMinLimL']=PC(1.00000e-002) # PCMinLimL       Lower limit limit P:C ratio detritus            [gP/gC]
-        params['ZSedDetC']=PC(0.00000e+000) # ZSedDetC        zeroth-order sedimentation flux DetC
-        params['VSedDetC']=PC(1.50000e+000) # VSedDetC        Setling velocity Detritus-C                     [d-1]
-        params['RcDetCS1']=PC(3.00000e-002) # RcDetCS1        Decomposition rate Detritus-C in sediment layer [d-1]
-        params['TcBMDetC']=PC(1.11000e+000) # TcBMDetC        Temperature coeff. mineralisation DetC in sed.  [-]
-        params['RcDetN']=PC(1.20000e-001) # RcDetN          first-order mineralisation rate DetN            [d-1]
-        params['RcDetNHigh']=PC(1.80000e-001) # RcDetNHigh      maximum first-order mineralisation rate DetN    [d-1]
-        params['TcDetN']=PC(1.11000e+000) # TcDetN          temperature coefficient for mineralisation DetN [-]
-        params['RcDetNS1']=PC(3.00000e-002) # RcDetNS1        1st-order mineralisation rate DetN in layer S1  [d-1]
-        params['TcBMDetN']=PC(1.11000e+000) # TcBMDetN        Temperature coefficient bottom Detritus-N       [-]
-        params['C-NDetCS1']=PC(6.60000e+000) # C-NDetCS1       C:N ratio in Detritus in the sediment s1        [gC/gN]
-        params['C-PDetCS1']=PC(5.00000e+001) # C-PDetCS1       C:P ratio in Detritus in the sediment s1        [gC/gP]
-        params['C-SDetCS1']=PC(4.00000e+000) # C-SDetCS1       C:si ratio in Detritus in the sediment s1       [gC/gSi]
-        params['RcDetP']=PC(1.20000e-001) # RcDetP          first-order mineralisation rate DetP            [d-1]
-        params['RcDetPHigh']=PC(1.80000e-001) # RcDetPHigh      maximum first-order mineralisation rate DetP    [d-1]
-        params['TcDetP']=PC(1.11000e+000) # TcDetP          temperature coefficient for mineralisation DetP [-]
-        params['RcDetPS1']=PC(3.00000e-002) # RcDetPS1        1st-order mineralisation rate DetP in layer S1  [d-1]
-        params['TcBMDetP']=PC(1.11000e+000) # TcBMDetP        Temperature coefficient bottom Detritus-P       [-]
-        params['RcDetSi']=PC(4.00000e-002) # RcDetSi         first-order mineralisation rate Detsi           [d-1]
-        params['RcDetSHigh']=PC(8.00000e-002) # RcDetSHigh      maximum first-order mineralisation rate DetSi   [d-1]
-        params['TcDetSi']=PC(1.11000e+000) # TcDetSi         temp. coefficient for mineralisation DetSi      [-]
-        params['SiCMinLimH']=PC(2.00000e-002) # SiCMinLimH      upper limit Si:C ratio detritus                 [gSi/gC]
-        params['SiCMinLimL']=PC(1.00000e-002) # SiCMinLimL      lower limit Si:C ratio detritus                 [gSi/gC]
-        
-        params['RcDetSiS1']=PC(7.50000e-003) # RcDetSiS1       1st-order mineralisation rate DetSi layer S1    [d-1]
-        params['TcBMDetSi']=PC(1.04700e+000) # TcBMDetSi       Temp. coefficient bottom Detritus-Si            [-]
-        params['RcNit20']=PC(1.00000e-001) # RcNit20         MM- nitrification rate at 20 oC                 [d-1]     nitr
-        params['TcNit']=PC(1.07000e+000) # TcNit           temperature coefficient for nitrification       [-]
-        params['KsAmNit']=PC(4.00000e-001) # KsAmNit         half saturation constant for ammonium cons.     [gN/m3]
-        params['KsOxNit']=PC(5.00000e-001) # KsOxNit         half saturation constant for DO cons.           [gO2/m3]
-        params['CTNit']=PC(3.00000e+000) # CTNit           Critical temperature for nitrification          [oC]
-        params['Rc0NitOx']=PC(0.00000e+000) # Rc0NitOx        zero-order nitrification rate at neg. DO        [d-1]
-        params['COXNIT']=PC(-0.00000e+000) # COXNIT          critical oxygen concentration for nitrification [gO2/m3]
-        params['RcNit']=PC(1.00000e-001) # RcNit           Nitrification rate                              [d-1]     nitr
-        params['OOXNIT']=PC(5.00000e+000) # OOXNIT          optimum oxygen concentration for nitrification  [gO2/m3]
-        params['fAtmDepNH4']=PC(0.00000e+000) # fAtmDepNH4      Fraction of atmospherical deposition of NH4     [-]
-        params['sw2AtmDNH4']=PC(0.00000e+000) # sw2AtmDNH4      maximise withdrawel to mass 0=no, 1=yes
-        params['RcDen20']=PC(0.0)          # RcDen20         MM-denitrification reaction rate at 20 oC       [d-1]     denrate
-        params['TcDenWat']=PC(1.07000e+000) # TcDenWat        temperature coefficient for denitrification     [-]
-        params['KsOxDen']=PC(1.00000e+000) # KsOxDen         half saturation constant for oxygen inhib.      [gO2/m3]
-        params['CTDEN']=PC(2.00000e+000) # CTDEN           Critical temperature for denitrification        [oC]
-        params['Rc0DenOx']=PC(0.00000e+000) # Rc0DenOx        zero-order denit. rate at low temperature       [d-1]
-        params['COXDEN']=PC(1.01000e+002) # COXDEN          crit. oxygen concentr. for denitrification      [gO2/m3]
-        params['OOXDEN']=PC(1.00000e+002) # OOXDEN          optimum oxygen concentration for denitrification[gO2/m3]
-        params['RcDenWat']=PC(0.03)         # RcDenWat        first-order denitrification rate in water       [d-1]     denrate
-        params['fAtmDepNO3']=PC(0.00000e+000) # fAtmDepNO3      fraction atmospherische deposition of NO3       [-]
-        
-        params['RcOOC']=PC(1.00000e-003) # RcOOC           first-order mineralisation rate OOC in layer S1 [d-1]
-        params['RcOOCHigh']=PC(1.00000e-003) # RcOOCHigh       maximum first-order mineralisation rate OOC     [d-1]
-        params['TcOOC']=PC(1.11000e+000) # TcOOC           temperature coefficient for mineralisation OOC  [-]
-        params['VSedOOC']=PC(1.00000e-001) # VSedOOC         sedimentation velocity OOC                      [m/d]
-        params['RcOOCS1']=PC(1.00000e-003) # RcOOCS1         first-order mineralisation rate OOC in layer S1 [d-1]
-        params['TcBMOOC']=PC(1.11000e+000) # TcBMOOC         temperature coeff. mineralisation OOC in sed    [-]
-        params['RcOOSi']=PC(2.00000e-002) # RcOOSi          first-order mineralisation rate OOSi in layers1 [d-1]
-        params['RcOOSiHigh']=PC(2.00000e-002) # RcOOSiHigh      maximum first-order mineralisation rate OOSi    [d-1]
-        params['TcOOSi']=PC(1.11000e+000) # TcOOSi          temperature coefficient for mineralisation OOSi [-]
-        params['RcOOSiS1']=PC(1.00000e-003) # RcOOSiS1        first-order mineralisation rate OOSi in layerS1 [-]
-        params['TcBMOOSi']=PC(1.11000e+000) # TcBMOOSi        temperature coeff. mineralisation OOSi in sed   [-]
-        
-        # Previously omitted in several models! Added Hans Los 16 January 2013
-        params['RcOON']=PC(1.00000e-003) # RcOON           first-order mineralisation rate OON in layer S1 [d-1]
-        params['RcOONHigh']=PC(1.00000e-003) # RcOONHigh       maximum first-order mineralisation rate OON     [d-1]
-        params['TcOON']=PC(1.11000e+000) # TcOON           temperature coefficient for mineralisation OON  [-]
-        params['RcOOP']=PC(1.00000e-003) # RcOOP           first-order mineralisation rate OOP in layer S1 [d-1]
-        params['RcOOPHigh']=PC(1.00000e-003) # RcOOPHigh       maximum first-order mineralisation rate OOP     [d-1]
-        params['TcOOP']=PC(1.11000e+000) # TcOOP           temperature coefficient for mineralisation OOP  [-]
-        
-        params['ZSedAlg']=PC(0.00000e+000) # ZSedAlg         zeroth-order sedimentation flux algae           [d-1]
-        params['V0SedAlg']=PC(0.0) # base sedimentation velocity of algae
-        params['Salinity']=PC(0.00000e+000) # Salinity        Background salinity                             [ppt]
-        params['SWRear']=PC(9.00000e+000) # SWRear          switch for oxygen reaeration formulation (1-13)
-        params['KLRear']=PC(4.00000e+000) # KLRear          reaeration transfer coefficient                 [d-1]
-        params['TCRear']=PC(1.01600e+000) # TCRear          Temperature coefficient for rearation           [-]
-        params['T1MxPP']=PC(1.00000e+001) # T1MxPP          1st Temperature coefficient for algae growth    [oC]
-        params['T2MxPP']=PC(1.30000e+001) # T2MxPP          2nd Temperature coefficient for algae growth    [oC]
-        params['fSODaut']=PC(0.00000e+000) # fSODaut         autonomous SOD (no effect SOD stat.var)         [-]
-        params['fSOD']=PC(0.00000e+000) # fSOD            zeroth-order sediment oxygen demand flux        [-]
-        params['RcSOD']=PC(1.00000e-001) # RcSOD           ecay rate SOD at 20 oC                          [d-1]
-        params['TcSOD']=PC(1.04000e+000) # TcSOD           temperature coefficient decay SOD               [-]
-        params['COXSOD']=PC(0.00000e+000) # COXSOD          critical oxygen concentration for SOD decay     [g02/m3]
-        params['PeriodVTRA']=PC(2.40000e+001) # PeriodVTRA      Period                                          [day]
-        params['ExtVlBak']=PC(8.00000e-002) # ExtVlBak        background extinction visible light             [m-1]
-        params['ExtVlDetC']=PC(1.00000e-001) # ExtVlDetC       Vis Light specific extinction coefficient DetC  [m2/gC]
-        params['ExtVlIM1']=PC(2.50000e-002) # ExtVlIM1        VL specific extinction coefficient M1           [m2/g]
-        params['ExtVLSal0']=PC(9.70000e-001) # ExtVLSal0       Specific Extinction of humic substances via salinity [m2/g]
-        params['CLOSE_ERR']=PC(1.00000e+000) # CLOSE_ERR       Close after error
-        params['ScaleVDisp']=PC(1.00000e+000) # ScaleVDisp      Scale of verticle dispersion
-        params['MaxIter']=PC(2.00000e+002) # MaxIter         Maximum itteration - raised from 100
-        params['Tolerance']=PC(1.00000e-005) # Tolerance       Tollerance level - decreased from 10-7
+        # params['SWAdsP']=PC(0) # SWAdsP          switch PO4 adsorption <0=Kd|1=Langmuir|2=pHdep>
+        # params['KdPO4AAP']=PC(0.5) # KdPO4AAP        distrib. coeff. (-) or ads. eq. const.          [-]
+        # # params['VSedAAP']=PC(5.00000e-001 # VSedAAP         sedimentation velocity AAP                      [m/d]
+        # params['MaxPO4AAP']=PC(1.50000e-001) # MaxPO4AAP       adsorption capacity TIM for PO4                 [-]
+        # params['fSedIM1']=PC(0.25)         # fSedIM1         sedimentation flux IM1                          [-]
+        # params['VxSedIM1']=PC(0.00000e+000) # VxSedIM1        sedimentation velocity IM1                      [m/d]
+        # 
+        # params['SWOxyProd']=PC(1) # SWOxyProd       switch on oxygen prod. (0=BLOOM, 1=VAROXY)      [-]
+        # 
+        # # Deleted a bunch of parameters related to specific BLOOM classes
+        # 
+        # params['RcDetC']=PC(1.20000e-001) # RcDetC          first-order mineralisation rate DetC in layerS1 [d-1]
+        # params['RcDetCHigh']=PC(1.80000e-001) # RcDetCHigh      maximum first-order mineralisation rate DetC    [d-1]
+        # params['TcDetC']=PC(1.11000e+000) # TcDetC          temperature coefficient for mineralisation DetC [-]
+        # params['CTMin']=PC(3.00000e+000) # CTMin           critical temperature for mineralisation         [oC]
+        # params['NCMinLimH']=PC(1.50000e-001) # NCMinLimH       Upper limit limit N:C ratio detritus            [gN/gC]
+        # params['NCMinLimL']=PC(1.00000e-001) # NCMinLimL       Lower limit limit N:C ratio detritus            [gN/gC]
+        # params['PCMinLimH']=PC(1.50000e-002) # PCMinLimH       Upper limit limit P:C ratio detritus            [gP/gC]
+        # params['PCMinLimL']=PC(1.00000e-002) # PCMinLimL       Lower limit limit P:C ratio detritus            [gP/gC]
+        # params['ZSedDetC']=PC(0.00000e+000) # ZSedDetC        zeroth-order sedimentation flux DetC
+        # params['VSedDetC']=PC(1.50000e+000) # VSedDetC        Setling velocity Detritus-C                     [d-1]
+        # params['RcDetCS1']=PC(3.00000e-002) # RcDetCS1        Decomposition rate Detritus-C in sediment layer [d-1]
+        # params['TcBMDetC']=PC(1.11000e+000) # TcBMDetC        Temperature coeff. mineralisation DetC in sed.  [-]
+        # params['RcDetN']=PC(1.20000e-001) # RcDetN          first-order mineralisation rate DetN            [d-1]
+        # params['RcDetNHigh']=PC(1.80000e-001) # RcDetNHigh      maximum first-order mineralisation rate DetN    [d-1]
+        # params['TcDetN']=PC(1.11000e+000) # TcDetN          temperature coefficient for mineralisation DetN [-]
+        # params['RcDetNS1']=PC(3.00000e-002) # RcDetNS1        1st-order mineralisation rate DetN in layer S1  [d-1]
+        # params['TcBMDetN']=PC(1.11000e+000) # TcBMDetN        Temperature coefficient bottom Detritus-N       [-]
+        # params['C-NDetCS1']=PC(6.60000e+000) # C-NDetCS1       C:N ratio in Detritus in the sediment s1        [gC/gN]
+        # params['C-PDetCS1']=PC(5.00000e+001) # C-PDetCS1       C:P ratio in Detritus in the sediment s1        [gC/gP]
+        # params['C-SDetCS1']=PC(4.00000e+000) # C-SDetCS1       C:si ratio in Detritus in the sediment s1       [gC/gSi]
+        # params['RcDetP']=PC(1.20000e-001) # RcDetP          first-order mineralisation rate DetP            [d-1]
+        # params['RcDetPHigh']=PC(1.80000e-001) # RcDetPHigh      maximum first-order mineralisation rate DetP    [d-1]
+        # params['TcDetP']=PC(1.11000e+000) # TcDetP          temperature coefficient for mineralisation DetP [-]
+        # params['RcDetPS1']=PC(3.00000e-002) # RcDetPS1        1st-order mineralisation rate DetP in layer S1  [d-1]
+        # params['TcBMDetP']=PC(1.11000e+000) # TcBMDetP        Temperature coefficient bottom Detritus-P       [-]
+        # params['RcDetSi']=PC(4.00000e-002) # RcDetSi         first-order mineralisation rate Detsi           [d-1]
+        # params['RcDetSHigh']=PC(8.00000e-002) # RcDetSHigh      maximum first-order mineralisation rate DetSi   [d-1]
+        # params['TcDetSi']=PC(1.11000e+000) # TcDetSi         temp. coefficient for mineralisation DetSi      [-]
+        # params['SiCMinLimH']=PC(2.00000e-002) # SiCMinLimH      upper limit Si:C ratio detritus                 [gSi/gC]
+        # params['SiCMinLimL']=PC(1.00000e-002) # SiCMinLimL      lower limit Si:C ratio detritus                 [gSi/gC]
+        # 
+        # params['RcDetSiS1']=PC(7.50000e-003) # RcDetSiS1       1st-order mineralisation rate DetSi layer S1    [d-1]
+        # params['TcBMDetSi']=PC(1.04700e+000) # TcBMDetSi       Temp. coefficient bottom Detritus-Si            [-]
+        # params['RcNit20']=PC(1.00000e-001) # RcNit20         MM- nitrification rate at 20 oC                 [d-1]     nitr
+        # params['TcNit']=PC(1.07000e+000) # TcNit           temperature coefficient for nitrification       [-]
+        # params['KsAmNit']=PC(4.00000e-001) # KsAmNit         half saturation constant for ammonium cons.     [gN/m3]
+        # params['KsOxNit']=PC(5.00000e-001) # KsOxNit         half saturation constant for DO cons.           [gO2/m3]
+        # params['CTNit']=PC(3.00000e+000) # CTNit           Critical temperature for nitrification          [oC]
+        # params['Rc0NitOx']=PC(0.00000e+000) # Rc0NitOx        zero-order nitrification rate at neg. DO        [d-1]
+        # params['COXNIT']=PC(-0.00000e+000) # COXNIT          critical oxygen concentration for nitrification [gO2/m3]
+        # params['RcNit']=PC(1.00000e-001) # RcNit           Nitrification rate                              [d-1]     nitr
+        # params['OOXNIT']=PC(5.00000e+000) # OOXNIT          optimum oxygen concentration for nitrification  [gO2/m3]
+        # params['fAtmDepNH4']=PC(0.00000e+000) # fAtmDepNH4      Fraction of atmospherical deposition of NH4     [-]
+        # params['sw2AtmDNH4']=PC(0.00000e+000) # sw2AtmDNH4      maximise withdrawel to mass 0=no, 1=yes
+        # params['RcDen20']=PC(0.0)          # RcDen20         MM-denitrification reaction rate at 20 oC       [d-1]     denrate
+        # params['TcDenWat']=PC(1.07000e+000) # TcDenWat        temperature coefficient for denitrification     [-]
+        # params['KsOxDen']=PC(1.00000e+000) # KsOxDen         half saturation constant for oxygen inhib.      [gO2/m3]
+        # params['CTDEN']=PC(2.00000e+000) # CTDEN           Critical temperature for denitrification        [oC]
+        # params['Rc0DenOx']=PC(0.00000e+000) # Rc0DenOx        zero-order denit. rate at low temperature       [d-1]
+        # params['COXDEN']=PC(1.01000e+002) # COXDEN          crit. oxygen concentr. for denitrification      [gO2/m3]
+        # params['OOXDEN']=PC(1.00000e+002) # OOXDEN          optimum oxygen concentration for denitrification[gO2/m3]
+        # params['RcDenWat']=PC(0.03)         # RcDenWat        first-order denitrification rate in water       [d-1]     denrate
+        # params['fAtmDepNO3']=PC(0.00000e+000) # fAtmDepNO3      fraction atmospherische deposition of NO3       [-]
+        # 
+        # params['RcOOC']=PC(1.00000e-003) # RcOOC           first-order mineralisation rate OOC in layer S1 [d-1]
+        # params['RcOOCHigh']=PC(1.00000e-003) # RcOOCHigh       maximum first-order mineralisation rate OOC     [d-1]
+        # params['TcOOC']=PC(1.11000e+000) # TcOOC           temperature coefficient for mineralisation OOC  [-]
+        # params['VSedOOC']=PC(1.00000e-001) # VSedOOC         sedimentation velocity OOC                      [m/d]
+        # params['RcOOCS1']=PC(1.00000e-003) # RcOOCS1         first-order mineralisation rate OOC in layer S1 [d-1]
+        # params['TcBMOOC']=PC(1.11000e+000) # TcBMOOC         temperature coeff. mineralisation OOC in sed    [-]
+        # params['RcOOSi']=PC(2.00000e-002) # RcOOSi          first-order mineralisation rate OOSi in layers1 [d-1]
+        # params['RcOOSiHigh']=PC(2.00000e-002) # RcOOSiHigh      maximum first-order mineralisation rate OOSi    [d-1]
+        # params['TcOOSi']=PC(1.11000e+000) # TcOOSi          temperature coefficient for mineralisation OOSi [-]
+        # params['RcOOSiS1']=PC(1.00000e-003) # RcOOSiS1        first-order mineralisation rate OOSi in layerS1 [-]
+        # params['TcBMOOSi']=PC(1.11000e+000) # TcBMOOSi        temperature coeff. mineralisation OOSi in sed   [-]
+        # 
+        # # Previously omitted in several models! Added Hans Los 16 January 2013
+        # params['RcOON']=PC(1.00000e-003) # RcOON           first-order mineralisation rate OON in layer S1 [d-1]
+        # params['RcOONHigh']=PC(1.00000e-003) # RcOONHigh       maximum first-order mineralisation rate OON     [d-1]
+        # params['TcOON']=PC(1.11000e+000) # TcOON           temperature coefficient for mineralisation OON  [-]
+        # params['RcOOP']=PC(1.00000e-003) # RcOOP           first-order mineralisation rate OOP in layer S1 [d-1]
+        # params['RcOOPHigh']=PC(1.00000e-003) # RcOOPHigh       maximum first-order mineralisation rate OOP     [d-1]
+        # params['TcOOP']=PC(1.11000e+000) # TcOOP           temperature coefficient for mineralisation OOP  [-]
+        # 
+        # params['ZSedAlg']=PC(0.00000e+000) # ZSedAlg         zeroth-order sedimentation flux algae           [d-1]
+        # params['V0SedAlg']=PC(0.0) # base sedimentation velocity of algae
+        # params['Salinity']=PC(0.00000e+000) # Salinity        Background salinity                             [ppt]
+        # params['SWRear']=PC(9.00000e+000) # SWRear          switch for oxygen reaeration formulation (1-13)
+        # params['KLRear']=PC(4.00000e+000) # KLRear          reaeration transfer coefficient                 [d-1]
+        # params['TCRear']=PC(1.01600e+000) # TCRear          Temperature coefficient for rearation           [-]
+        # params['T1MxPP']=PC(1.00000e+001) # T1MxPP          1st Temperature coefficient for algae growth    [oC]
+        # params['T2MxPP']=PC(1.30000e+001) # T2MxPP          2nd Temperature coefficient for algae growth    [oC]
+        # params['fSODaut']=PC(0.00000e+000) # fSODaut         autonomous SOD (no effect SOD stat.var)         [-]
+        # params['fSOD']=PC(0.00000e+000) # fSOD            zeroth-order sediment oxygen demand flux        [-]
+        # params['RcSOD']=PC(1.00000e-001) # RcSOD           ecay rate SOD at 20 oC                          [d-1]
+        # params['TcSOD']=PC(1.04000e+000) # TcSOD           temperature coefficient decay SOD               [-]
+        # params['COXSOD']=PC(0.00000e+000) # COXSOD          critical oxygen concentration for SOD decay     [g02/m3]
+        # params['PeriodVTRA']=PC(2.40000e+001) # PeriodVTRA      Period                                          [day]
+        # params['ExtVlBak']=PC(8.00000e-002) # ExtVlBak        background extinction visible light             [m-1]
+        # params['ExtVlDetC']=PC(1.00000e-001) # ExtVlDetC       Vis Light specific extinction coefficient DetC  [m2/gC]
+        # params['ExtVlIM1']=PC(2.50000e-002) # ExtVlIM1        VL specific extinction coefficient M1           [m2/g]
+        # params['ExtVLSal0']=PC(9.70000e-001) # ExtVLSal0       Specific Extinction of humic substances via salinity [m2/g]
+                
+        params['CLOSE_ERR']=1 # CLOSE_ERR       Close after error
+        params['ScaleVDisp']=1 # ScaleVDisp      Scale of verticle dispersion
+        params['MaxIter']=200 # MaxIter         Maximum itteration - raised from 100
+        params['Tolerance']=1.0e-005 # Tolerance       Tollerance level - decreased from 10-7
         params['NOVEC']=PC(100.)         # NOVEC           Novec for numerical scheme
         params['Iteration Report']=PC(0.00000e+000) #Iteration Report Report iteration
-        params['Latitude']=PC(38.)          # Latitude        latitude of study area - San Francisco
-        params['RefDay']=PC(274.)         # RefDay          daynumber of reference day simulation - For now October [d]
-        params['VBurDMS1']=PC(5.00000e-003) # VBurDMS1        first order burial rate for layer S1            [d-1]
-        params['fBurS1IM1']=PC(5.00000e-003)
-        params['IM1S1']=PC(1000.)
-        params['SWSediment']=PC(1.00000e+000)
-        params['PorS1']=PC(3.00000e-001)
-        params['MaxThS1']=PC(999999)
+        params['Latitude']=38.          # Latitude        latitude of study area - San Francisco
+        params['RefDay']=274.         # RefDay          daynumber of reference day simulation - For now October [d]
 
-        params['MDETPR']=PC(5.00000E+000) # MDETPR          Prefernce of grazer of Detritus                 [-]
-        params['MGRZMO']=PC(1.00000E-001) # MGRZMO          Monod term filtration rate Mussel               [gC/m3]
-        params['MGRZRM']=PC(1.00000E-001) # MGRZRM          Maximum daily uptake Mussel                     [mgC/mgC/d]
-        params['MGRZFM']=PC(5.00000E-002) # MGRZFM          Maximum filtration velocity Mussel              [m3/gC/d]
-        params['MTMPFM']=PC(4.00000E-002) # MTMPFM          Tempearture coefficient Mussel filtration       [1/oC]
-        params['MTMPRM']=PC(4.00000E-002) # MTMPFM          Tempearture coefficient Mussel feeding rate     [1/oC]
-        params['MGRZMM']=PC(0.20000E-000) # MGRZMM          Maximum relative mortality Mussel               [1/d]
-        params['MGRZGM']=PC(0.20000E-000) # MGRZGM          Maximum relative Growth Mussel                  [1/d]
-        params['MGRZSE']=PC(0.00500E+000) # MGRZSE          Standaard respiration coefficient Mussel        [1/d]
-        params['MGRZRE']=PC(0.20000E+000) # MGRZRE          Maintenance respiration coefficient Mussel      [-]
-        params['MUnitSW']=PC(1.00000E+000) # MUnitSW         Use gC/m3 (0) or gC/m2 (1) for Mussels          [-]
+        # params['VBurDMS1']=PC(5.00000e-003) # VBurDMS1        first order burial rate for layer S1            [d-1]
+        # params['fBurS1IM1']=PC(5.00000e-003)
+        # params['IM1S1']=PC(1000.)
+        # params['SWSediment']=PC(1.00000e+000)
+        # params['PorS1']=PC(3.00000e-001)
+        # params['MaxThS1']=PC(999999)
+
+        # params['MDETPR']=PC(5.00000E+000) # MDETPR          Prefernce of grazer of Detritus                 [-]
+        # params['MGRZMO']=PC(1.00000E-001) # MGRZMO          Monod term filtration rate Mussel               [gC/m3]
+        # params['MGRZRM']=PC(1.00000E-001) # MGRZRM          Maximum daily uptake Mussel                     [mgC/mgC/d]
+        # params['MGRZFM']=PC(5.00000E-002) # MGRZFM          Maximum filtration velocity Mussel              [m3/gC/d]
+        # params['MTMPFM']=PC(4.00000E-002) # MTMPFM          Tempearture coefficient Mussel filtration       [1/oC]
+        # params['MTMPRM']=PC(4.00000E-002) # MTMPFM          Tempearture coefficient Mussel feeding rate     [1/oC]
+        # params['MGRZMM']=PC(0.20000E-000) # MGRZMM          Maximum relative mortality Mussel               [1/d]
+        # params['MGRZGM']=PC(0.20000E-000) # MGRZGM          Maximum relative Growth Mussel                  [1/d]
+        # params['MGRZSE']=PC(0.00500E+000) # MGRZSE          Standaard respiration coefficient Mussel        [1/d]
+        # params['MGRZRE']=PC(0.20000E+000) # MGRZRE          Maintenance respiration coefficient Mussel      [-]
+        # params['MUnitSW']=PC(1.00000E+000) # MUnitSW         Use gC/m3 (0) or gC/m2 (1) for Mussels          [-]
 
         params['ONLY_ACTIVE']=PC(1.00000e+000) # ONLY_ACTIVE
-        params['ACTIVE_AdsPO4AAP']=PC(1.00000e+000) # ACTIVE_AdsPO4AAP        Ad(De)Sorption ortho phosphorus to inorg. matter
-        params['ACTIVE_Sed_AAP']=PC(1.00000e+000) # ACTIVE_Sed_AAP          Sedimentation AAP (adsorbed PO4)
-        params['ACTIVE_VertDisp']=PC(1.00000e+000) # ACTIVE_VertDisp         Vertical dispersion (segment -> exchange)
-        params['ACTIVE_BurS1_AAP']=PC(1.00000e+000) # ACTIVE_BurS1_AAP        Burial of AAP (adsorbed PO4) from sediment S1
-
-        params['ACTIVE_Compos']=PC(1.00000e+000) # ACTIVE_Compos           Composition
-        params['ACTIVE_DecFast']=PC(1.00000e+000) # ACTIVE_WM_DetC          Mineralisation detritus carbon
-        params['ACTIVE_Sed_POC1']=PC(1.00000e+000) # ACTIVE_SedDetC          Sedimentation detritus carbon
-        params['ACTIVE_BMS1_DetC']=PC(1.00000e+000) # ACTIVE_BMS1_DetC        Mineralisation detritus carbon in sediment S1
-        params['ACTIVE_BurS1_DetC']=PC(1.00000e+000) # ACTIVE_BurS1_DetC       Burial detritus carbon from sediment S1
-        params['ACTIVE_BMS1_DetN']=PC(1.00000e+000) # ACTIVE_BMS1_DetN        Mineralisation detritus nitrogen in sediment S1
-        params['ACTIVE_BurS1N_Det']=PC(1.00000e+000) # ACTIVE_BurS1N_Det       Burial nutrients in detritus from sediment S1
-        params['ACTIVE_BMS1_DetP']=PC(1.00000e+000) # ACTIVE_BMS1_DetP        Mineralisation detritus phosphorus in sediment S1
-        params['ACTIVE_DisSi']=PC(1.00000e+000) # ACTIVE_WM_DetSi         Mineralisation detritus silicium
-        params['ACTIVE_BMS1_DetSi']=PC(1.00000e+000) # ACTIVE_BMS1_DetSi       Mineralisation detritus silica in sediment S1
-        params['ACTIVE_Nitrif_NH4']=PC(1.00000e+000) # ACTIVE_Nitrif_NH4       Nitrification of ammonium
-        
-        params['ACTIVE_BMS1_OON']=PC(1.00000e+000) # ACTIVE_BMS1_OON         mineralisation other organic N in sediment S1
-        params['ACTIVE_BMS1_OOP']=PC(1.00000e+000)
-        params['ACTIVE_AtmDep_NH4']=PC(1.00000e+000) # ACTIVE_AtmDep_NH4       Atmosperic deposition NH4
-        params['ACTIVE_DenWat_NO3']=PC(1.00000e+000) # ACTIVE_DenWat_NO3       Denitrification in water column
-        params['ACTIVE_AtmDep_NO3']=PC(1.00000e+000) # ACTIVE_AtmDep_NO3       Atmosperic deposition NO3
-        params['ACTIVE_DecMedium']=PC(1.00000e+000) # ACTIVE_WM_OOC           Mineralisation other organic carbon
-        params['ACTIVE_Sed_OOC']=PC(1.00000e+000) # ACTIVE_Sed_OOC          Sedimentation other organic carbon
-        params['ACTIVE_SedN_OOC']=PC(1.00000e+000) # ACTIVE_SedN_OOC         Sedimentation nutrients in OOC
-        params['ACTIVE_SedN_Det']=PC(1.00000e+000) # ACTIVE_SedN_Det         Sedimimentation nutrients in detritus
-        params['ACTIVE_BMS1_OOC']=PC(1.00000e+000) # ACTIVE_BMS1_OOC         Mineralisation other organic C in sediment S1
-        params['ACTIVE_BurS1_OOC']=PC(1.00000e+000) # ACTIVE_BurS1_OOC        Burial other organic carbon from sediment S1
-        params['ACTIVE_BurS1N_OO']=PC(1.00000e+000) # ACTIVE_BurS1N_OO        Burial nutrients in oth. organics from sediment S1
-        params['ACTIVE_BMS1_OOSi']=PC(1.00000e+000) # ACTIVE_BMS1_OOSi        Mineralisation other organic Si in sediment S1
+        # params['ACTIVE_AdsPO4AAP']=PC(1.00000e+000) # ACTIVE_AdsPO4AAP        Ad(De)Sorption ortho phosphorus to inorg. matter
+        # params['ACTIVE_Sed_AAP']=PC(1.00000e+000) # ACTIVE_Sed_AAP          Sedimentation AAP (adsorbed PO4)
+        # params['ACTIVE_VertDisp']=PC(1.00000e+000) # ACTIVE_VertDisp         Vertical dispersion (segment -> exchange)
+        # params['ACTIVE_BurS1_AAP']=PC(1.00000e+000) # ACTIVE_BurS1_AAP        Burial of AAP (adsorbed PO4) from sediment S1
+        # 
+        # params['ACTIVE_Compos']=PC(1.00000e+000) # ACTIVE_Compos           Composition
+        # params['ACTIVE_DecFast']=PC(1.00000e+000) # ACTIVE_WM_DetC          Mineralisation detritus carbon
+        # params['ACTIVE_Sed_POC1']=PC(1.00000e+000) # ACTIVE_SedDetC          Sedimentation detritus carbon
+        # params['ACTIVE_BMS1_DetC']=PC(1.00000e+000) # ACTIVE_BMS1_DetC        Mineralisation detritus carbon in sediment S1
+        # params['ACTIVE_BurS1_DetC']=PC(1.00000e+000) # ACTIVE_BurS1_DetC       Burial detritus carbon from sediment S1
+        # params['ACTIVE_BMS1_DetN']=PC(1.00000e+000) # ACTIVE_BMS1_DetN        Mineralisation detritus nitrogen in sediment S1
+        # params['ACTIVE_BurS1N_Det']=PC(1.00000e+000) # ACTIVE_BurS1N_Det       Burial nutrients in detritus from sediment S1
+        # params['ACTIVE_BMS1_DetP']=PC(1.00000e+000) # ACTIVE_BMS1_DetP        Mineralisation detritus phosphorus in sediment S1
+        # params['ACTIVE_DisSi']=PC(1.00000e+000) # ACTIVE_WM_DetSi         Mineralisation detritus silicium
+        # params['ACTIVE_BMS1_DetSi']=PC(1.00000e+000) # ACTIVE_BMS1_DetSi       Mineralisation detritus silica in sediment S1
+        # params['ACTIVE_Nitrif_NH4']=PC(1.00000e+000) # ACTIVE_Nitrif_NH4       Nitrification of ammonium
+        # 
+        # params['ACTIVE_BMS1_OON']=PC(1.00000e+000) # ACTIVE_BMS1_OON         mineralisation other organic N in sediment S1
+        # params['ACTIVE_BMS1_OOP']=PC(1.00000e+000)
+        # params['ACTIVE_AtmDep_NH4']=PC(1.00000e+000) # ACTIVE_AtmDep_NH4       Atmosperic deposition NH4
+        # params['ACTIVE_DenWat_NO3']=PC(1.00000e+000) # ACTIVE_DenWat_NO3       Denitrification in water column
+        # params['ACTIVE_AtmDep_NO3']=PC(1.00000e+000) # ACTIVE_AtmDep_NO3       Atmosperic deposition NO3
+        # params['ACTIVE_DecMedium']=PC(1.00000e+000) # ACTIVE_WM_OOC           Mineralisation other organic carbon
+        # params['ACTIVE_Sed_OOC']=PC(1.00000e+000) # ACTIVE_Sed_OOC          Sedimentation other organic carbon
+        # params['ACTIVE_SedN_OOC']=PC(1.00000e+000) # ACTIVE_SedN_OOC         Sedimentation nutrients in OOC
+        # params['ACTIVE_SedN_Det']=PC(1.00000e+000) # ACTIVE_SedN_Det         Sedimimentation nutrients in detritus
+        # params['ACTIVE_BMS1_OOC']=PC(1.00000e+000) # ACTIVE_BMS1_OOC         Mineralisation other organic C in sediment S1
+        # params['ACTIVE_BurS1_OOC']=PC(1.00000e+000) # ACTIVE_BurS1_OOC        Burial other organic carbon from sediment S1
+        # params['ACTIVE_BurS1N_OO']=PC(1.00000e+000) # ACTIVE_BurS1N_OO        Burial nutrients in oth. organics from sediment S1
+        # params['ACTIVE_BMS1_OOSi']=PC(1.00000e+000) # ACTIVE_BMS1_OOSi        Mineralisation other organic Si in sediment S1
 
         # Maybe BLOOM-only?
         # params['ACTIVE_SEDALG']=PC(1.00000e+000) # ACTIVE_SEDALG           Sedimentation of algae species i
         
-        params['ACTIVE_RearOXY']=PC(1.00000e+000) # ACTIVE_RearOXY          Reaeration of oxygen
+        # params['ACTIVE_RearOXY']=PC(1.00000e+000) # ACTIVE_RearOXY          Reaeration of oxygen
 
         # This had been xxx'd out - trying to restore it.  possible that SwOxyProd=1 is the right way, tho.
         # ACTIVE_VAROXY=1 gets through delwaq1, but fails in delwaq2
         # params['ACTIVE_VAROXY']=PC(1.00000e+000) # ACTIVE_VAROXY           Variable oxygen
-        params['SWOxyProd']=PC(1) # maybe that's the correct way???
-        params['ACTIVE_SedOXYDem']=PC(1.00000e+000) # ACTIVE_SedOXYDem        sediment oxygen demand
-        params['ACTIVE_DynDepth']=PC(1.00000e+000) # ACTIVE_DynDepth         Dynamical depth
-        params['ACTIVE_S1_Comp']=PC(1.00000e+000) # ACTIVE_S1_Comp          Composition sediment layer S1
-        params['ACTIVE_S2_Comp']=PC(1.00000e+000)
+        # params['SWOxyProd']=PC(1) # maybe that's the correct way???
+        # params['ACTIVE_SedOXYDem']=PC(1.00000e+000) # ACTIVE_SedOXYDem        sediment oxygen demand
+        # params['ACTIVE_DynDepth']=PC(1.00000e+000) # ACTIVE_DynDepth         Dynamical depth
+        # params['ACTIVE_S1_Comp']=PC(1.00000e+000) # ACTIVE_S1_Comp          Composition sediment layer S1
+        # params['ACTIVE_S2_Comp']=PC(1.00000e+000)
         
         params['ACTIVE_CalcRad']=PC(1.00000e+000) # ACTIVE_CalcRad          Radiation calculation
         params['ACTIVE_DepAve']=PC(1.00000e+000) # ACTIVE_DepAve           Average depth for Bloom step
@@ -308,8 +401,9 @@ class BayDynamo(waq_scenario.Scenario):
         params['ACTIVE_vtrans']=PC(1.00000e+000) # ACTIVE_vtrans           vertical mixing distribution over a period
         params['ACTIVE_Compos']=PC(1.00000e+000) # ACTIVE_POC_Dyn          Composition of POC (Dynamo & Bloom)
         params['ACTIVE_Tau']=PC(1.00000e+000) # ACTIVE_Tau              Shear stress: Calculation of bottom friction
-        params['ACTIVE_Bur_DM']=PC(1.00000e+000) # ACTIVE_Bur_DM           Burial total bottom mass (dry matter)
-        params['ACTIVE_CalVSALG']=PC(1.00000e+000) # ACTIVE_CalVSALG         Sedimentation velocity ALGi = f (Temp SS Sal)
+        # params['ACTIVE_Bur_DM']=PC(1.00000e+000) # ACTIVE_Bur_DM           Burial total bottom mass (dry matter)
+        # params['ACTIVE_CalVSALG']=PC(1.00000e+000) # ACTIVE_CalVSALG         Sedimentation velocity ALGi = f (Temp SS Sal)
+
         params['ACTIVE_Veloc']=PC(1.00000e+000) # ACTIVE_Veloc            horizontal flow velocity
         params['ACTIVE_SaturOXY']=PC(1.00000e+000) # ACTIVE_SaturOXY         Saturation concentration oxygen
         params['ACTIVE_TotDepth']=PC(1.00000e+000) # ACTIVE_TotDepth         Calculate total depth
