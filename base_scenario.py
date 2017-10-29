@@ -41,9 +41,9 @@ reload(waq_scenario)
 # Specify locations of outside data sources:
 
 # POTW data, checked out in subdirectory:
-potw_fn='sfbay_potw/outputs/sfbay_potw.nc'
+potw_fn='sfbay_potw/outputs/sfbay_delta_potw.nc'
 # Selection of hydrodynamics data:
-rel_hyd_path="../hydro/hydro-wy2013-v03-sig-agg-lp/com-sfb_wy2013_sigagglp_v03.hyd"
+rel_hyd_path="hydro/com-sfb_wy2013_sigagglp_v03.hyd"
 
 # External reference to radiance data defined in radsurf() in Scen() class
 
@@ -53,6 +53,7 @@ rel_hyd_path="../hydro/hydro-wy2013-v03-sig-agg-lp/com-sfb_wy2013_sigagglp_v03.h
 sfbay_potw=xr.open_dataset(potw_fn)
 
 hydro=waq_scenario.HydroFiles(hyd_path=rel_hyd_path)
+hydro.enable_write_symlink=True
 
 ## 
 
@@ -61,6 +62,8 @@ Sub=waq_scenario.Substance
 IC=waq_scenario.Initial
 
 class BayDynamo(waq_scenario.Scenario):
+    map_formats=['binary']
+    
     def init_substances(self):
         subs=super(BayDynamo,self).init_substances()
         self.log.info('BayDynamo: init_substances()')
@@ -321,8 +324,8 @@ class BayDynamo(waq_scenario.Scenario):
 
 
 class Scen(BayDynamo):
-    name="sfbay_dynamo000"
-    desc=('sfbay_dynamo000',
+    name="sfbay_npzd000"
+    desc=('sfbay_npzd',
           'wy2013',
           'sig-agg-lp')
     integration_option="""16 ;
@@ -331,7 +334,9 @@ class Scen(BayDynamo):
     BAL_NOLUMPPROCESSES BAL_NOLUMPLOADS BAL_NOLUMPTRANSPORT
     BAL_NOSUPPRESSSPACE BAL_NOSUPPRESSTIME
     """
-    _base_path='auto'
+    # base_path='dwaq_000' # nefis output
+    # base_path='dwaq_001' # switch to binary map output
+    base_path='dwaq_002' # long run
 
     time_step=3000 # matches the hydro
 
@@ -539,7 +544,7 @@ class Scen(BayDynamo):
         # rs=PC(75.0) # dial that back, too.
 
         # Pull in Union City CIMIS data:
-        df=xr.open_dataset('/opt/data/cimis/union_city-hourly-2001-2016.nc')
+        df=xr.open_dataset('union_city-hourly-2001-2016.nc')
         # Source is hourly, take true daily averages:
         daily_rad = np.nanmean( df['HlySolRad'].values.reshape([-1,24]), axis=1)
         daily_rad = utils.fill_invalid(daily_rad) # rare, but a few nans.
@@ -569,7 +574,7 @@ class Scen(BayDynamo):
                       'Chlfa',
                       'Phyt',
                       # 'AlgN','AlgP','AlgSi',
-                      'fppDiat','fppGreen', # maybe?
+                      'fppDiat','fppGreen', # net pri pro
                       'volume',
                       'depth')
         self.map_output+=extra_fields
@@ -713,12 +718,12 @@ class Scen(BayDynamo):
 
 sec=datetime.timedelta(seconds=1)
 
-if 1:  # short run for testing:
+if 0:  # short run for testing:
     start_time=hydro.time0+60*24*3600*sec
     # and run for 20 days
     stop_time=start_time + 20*24*3600*sec
     map_time_step=3000 # half hour
-if 0: # long run
+if 1: # long run
     start_time=hydro.time0+hydro.t_secs[ 0]*sec
     stop_time =hydro.time0+hydro.t_secs[-2]*sec
     map_time_step=1000000 # daily
@@ -730,3 +735,6 @@ scen.map_time_step=map_time_step
     
 scen.cmd_default()
 
+##
+
+# Can we get some basic cal plots going as part of that?
