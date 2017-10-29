@@ -336,7 +336,8 @@ class Scen(BayDynamo):
     """
     # base_path='dwaq_000' # nefis output
     # base_path='dwaq_001' # switch to binary map output
-    base_path='dwaq_002' # long run
+    # base_path='dwaq_002' # long run
+    base_path='dwaq_003' # osx run    
 
     time_step=3000 # matches the hydro
 
@@ -494,9 +495,6 @@ class Scen(BayDynamo):
         # params['ExtVlBak']=PC(4.0) # just a wee bit of phyto?  too much!
         params['ExtVlBak']=PC(6.0) # crank it back down, in conjunction with lower rad_surf
         
-        params['ACTIVE_DYNDEPTH']=PC(1)
-        params['ACTIVE_TOTDEPTH']=PC(1)
-
         # looser than this and the errors are quite visible.  This already feels lenient,
         # but in 2016-06 tighter tolerances led to non-convergence.
         # 2017-03-17: This had been 1.0e-5, but I would like to see if it can handle a slightly tighter
@@ -508,25 +506,12 @@ class Scen(BayDynamo):
 
         params['VWIND']=PC(5.0) 
 
-        params['ACTIVE_DenSed_NO3']=PC(1) # what wasn't this on in the bay bloom setup?
         params['TimMultBl']=PC(48) # daily bloom step for a 0.5h waq step.
 
         params['RadSurf']=self.radsurf()
 
-        # pull some parameters from the previous tuning
-        params['RcNit']=PC(0.10)
-        # for denit., old parameter is too aggressive as we didn't have denwat back then.
-        #params['RcDenSed']=PC(0.17)
-        #params['RcDenWat']=PC(0.3) # was from baydynamo
-        # These were an improvement, but don't leave any surplus of nitrogen...
-        # params['RcDenSed']=PC(0.1)
-        # params['RcDenWat']=PC(0.01)
-        #
-        params['RcDenSed']=PC(0.05)
-        params['RcDenWat']=PC(0.005) 
-
-        params['fRefl']=PC(0.1) # reflected radiation
-        params['PPMaxDiat']=PC(1.5) # down from default 2.3
+        # params['fRefl']=PC(0.1) # reflected radiation
+        # params['PPMaxDiat']=PC(1.5) # down from default 2.3
         return params
         
     def cmd_default(self):
@@ -705,6 +690,7 @@ class Scen(BayDynamo):
         # These is also RcNit20, but with the specific flags that doesn't
         # get used.
         # Only need to zero out base rates, not temp coefficients.
+        # RcDenSed is failing
         for param in ['RcNit','RcDenSed','RcDenWat']:
             if param not in self.parameters:
                 raise Exception("Can only unDeltify parameters which have specified values: %s"%param)
@@ -718,6 +704,7 @@ class Scen(BayDynamo):
 
 sec=datetime.timedelta(seconds=1)
 
+# # 
 if 0:  # short run for testing:
     start_time=hydro.time0+60*24*3600*sec
     # and run for 20 days
@@ -732,9 +719,53 @@ scen=Scen(hydro=hydro,
           start_time=start_time,
           stop_time=stop_time)
 scen.map_time_step=map_time_step
-    
+
+## 
+
 scen.cmd_default()
 
 ##
 
 # Can we get some basic cal plots going as part of that?
+
+# Comparison of the processes in base_scenario, vs. the substance file:
+
+# Substances:
+#   Both:  OXY salinity continuity nh4 no3 po4 si
+#          detcs1 detns1 detsis1 detps1
+#   Only base_scenario:
+#     aap, detc, detn detp detsi, diat, green, ooc oon oop oosi
+#     aaps1  oocs1 oons1 oops1 oosis1 sod
+#   Only sub file: opal poc1 pon1 pop1, mdiatoms_{e,n,p}
+#     mflagela_{e,n,p}
+
+
+# Processes:
+#   Both:  VertDisp DenWat_NO3 nitrif_nh4 RearOXY DenSed_NO3
+#          AtmDep_NH4 AtmDep_NO3 CalcRad
+#          BMS1_DetC, BMS1_DetN, BMS1_DetP, BMS1_DetSi
+#          SaturOXY, TotDepth Bur_DM  S1_Comp Sum_Sedim
+#          Extinc_VLG DisSi Compos DynDepth DecFast CalVSALG
+#          DepAve Daylength vtrans Veloc
+# Only base_scenario:
+#          Phy_dyn GroMRt_{Gre,Dia} Nutupt_alg nutrel_alg seddiat
+#          rad_green rad_diat pprlim AdsPO4AAP ACTIVE_Sed_AAP
+#          BurS1_AAP sed_poc1 burs1_{detc,detn,detp,detsi}
+#          BMS1_OON BMS1_OOP Sed_OOC SedN_OOC BMS1_OOC BurS1_OOC
+#          BurS1N_OO BMS1_OOSi 
+#          SedOXYDem Tau Chezy SalinChlor DecMedium SedN_Det
+#          S2_Comp Extinc_VL
+# Only substance file:
+#          BLOOM_P Sed_Opal Sed_POC1 SedNPOC1 S12TraDetC S12TraDetN
+#          S12TraDetP SedPhBlo_P Phy_Blo_P SEDALG EXTINABVLP
+#          CalVS_POC1 CONSELAC Secchi AtmDep_PO4
+
+
+# substance file:
+#   constant values for VertDisper, temp
+#   TimMultBl - probably needs adjusting
+#   COXDEN seems very high -
+#   RcDenWat very small
+# RcNit 0.07 - not bad
+# Just set a shear stress - good
+# Use a constant RadSurf - not really, it's set to -999
