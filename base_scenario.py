@@ -89,10 +89,10 @@ def parse_substance_file(fn,substance_cb=None,
                 break
             if blk=='substance':
                 sub_name=tok().strip("'")
-                activivity=tok()
+                activity=tok()
                 sub_attrs=nv_pairs(stop_on='end-substance')
                 if substance_cb:
-                    substance_cb(name,active=(activity=='active'))
+                    substance_cb(sub_name,active=(activity=='active'))
                 # scen.substances[name]=Substance(active=(activity=='active'))
             elif blk=='parameter':
                 par_name=tok().strip("'")
@@ -131,14 +131,21 @@ def parse_substance_file(fn,substance_cb=None,
 class BayDynamo(waq_scenario.Scenario):
     map_formats=['binary']
     sub_files=['SFB_pars.sub']
-    
+    use_bloom=True
+
+    def __init__(self,*a,**k):
+        super(BayDynamo,self).__init__(*a,**k)
+
+        for fn in self.sub_files:
+            self.add_outputs_from_sub(fn)
+
     def add_substances_from_sub(self,fn,subs):
         def sub_cb(name,active):
             subs[name]=Sub(active=active)
         parse_substance_file(fn,substance_cb=sub_cb)
     def add_parameters_from_sub(self,fn,params):
         def param_cb(name,attrs):
-            params[name]=attrs['value']
+            params[name]=float(attrs['value'])
         def proc_cb(name):
             params["ACTIVE_"+name]=1
         parse_substance_file(fn,parameter_cb=param_cb,process_cb=proc_cb)
@@ -146,11 +153,11 @@ class BayDynamo(waq_scenario.Scenario):
         def output_cb(name):
             self.map_output += (name,)
             self.hist_output += (name,)
-            parse_substance_file(fn,output_cb=output_cb)
+        parse_substance_file(fn,output_cb=output_cb)
             
     def init_substances(self):
         subs=super(BayDynamo,self).init_substances()
-        for sub_fn in sub_files:
+        for sub_fn in self.sub_files:
             self.add_substances_from_sub(sub_fn,subs)
             
         # self.log.info('BayDynamo: init_substances()')
@@ -193,7 +200,7 @@ class BayDynamo(waq_scenario.Scenario):
     def init_parameters(self):       
         params=super(BayDynamo,self).init_parameters()
 
-        for sub_fn in sub_files:
+        for sub_fn in self.sub_files:
             self.add_parameters_from_sub(sub_fn,params)
         
         self.log.info("Start of BayDynamo parameter defs")
@@ -349,7 +356,7 @@ class BayDynamo(waq_scenario.Scenario):
         # params['MGRZRE']=PC(0.20000E+000) # MGRZRE          Maintenance respiration coefficient Mussel      [-]
         # params['MUnitSW']=PC(1.00000E+000) # MUnitSW         Use gC/m3 (0) or gC/m2 (1) for Mussels          [-]
 
-        params['ONLY_ACTIVE']=PC(1.00000e+000) # ONLY_ACTIVE
+        params['ONLY_ACTIVE']=1 # ONLY_ACTIVE
         # params['ACTIVE_AdsPO4AAP']=PC(1.00000e+000) # ACTIVE_AdsPO4AAP        Ad(De)Sorption ortho phosphorus to inorg. matter
         # params['ACTIVE_Sed_AAP']=PC(1.00000e+000) # ACTIVE_Sed_AAP          Sedimentation AAP (adsorbed PO4)
         # params['ACTIVE_VertDisp']=PC(1.00000e+000) # ACTIVE_VertDisp         Vertical dispersion (segment -> exchange)
@@ -431,15 +438,20 @@ class Scen(BayDynamo):
     # base_path='dwaq_000' # nefis output
     # base_path='dwaq_001' # switch to binary map output
     # base_path='dwaq_002' # long run
-    base_path='dwaq_003' # osx run    
+    # base_path='dwaq_003' # osx run    
+    # base_path='dwaq_004' # set outputs from .sub file
+    # base_path='dwaq_005' # fix ExtVlBak 6 --> 2, and drop BLOOMGRP from outputs
+    base_path='dwaq_006' # maybe fix salinity being all 0.
 
     time_step=3000 # matches the hydro
 
-    
     def init_substances(self):
         subs=super(Scen,self).init_substances()
 
-        # first cut at unifying the handling of src_tags 
+        if 'salinity' in subs:
+            self.log.warning("Removing substance salinity in favor of parameter")
+            del subs['salinity']
+            
         
         subs['OXY']=Sub(initial=IC(default=8.0)) # start DO at 8mg/L
         subs['continuity']=Sub(initial=IC(default=1.0))
@@ -580,32 +592,21 @@ class Scen(BayDynamo):
         # parameters which are not currently used.
         params=super(Scen,self).init_parameters()
         
-        params['NOTHREADS']=PC(28) # better to keep it to real cores?
-        # params['RefDay']=PC(274.) # what's reference day??
+        params['NOTHREADS']=3 # better to keep it to real cores?
 
-        #params['ExtVlBak']=PC(2.0) # approx. average from USGS cruises.
-        # see if factor of 5 shifts things - it does, too much.  no phyto!
-        #params['ExtVlBak']=PC(10.0) 
-        # params['ExtVlBak']=PC(4.0) # just a wee bit of phyto?  too much!
-        params['ExtVlBak']=PC(6.0) # crank it back down, in conjunction with lower rad_surf
+        params['ExtVlBak']=1.5 # approx. average from USGS cruises, less dwaq corrections
         
-        # looser than this and the errors are quite visible.  This already feels lenient,
-        # but in 2016-06 tighter tolerances led to non-convergence.
-        # 2017-03-17: This had been 1.0e-5, but I would like to see if it can handle a slightly tighter
-        # bound.
-        params['Tolerance']=PC(1.0e-6)
+        params['Tolerance']=1.0e-6
         
         # if convergence becomes an issue, there *might* be more info here:
         # params['Iteration Report']=PC(1)
 
-        params['VWIND']=PC(5.0) 
+        params['VWIND']=3.5
 
-        params['TimMultBl']=PC(48) # daily bloom step for a 0.5h waq step.
+        params['TimMultBl']=48 # daily bloom step for a 0.5h waq step.
 
         params['RadSurf']=self.radsurf()
 
-        # params['fRefl']=PC(0.1) # reflected radiation
-        # params['PPMaxDiat']=PC(1.5) # down from default 2.3
         return params
         
     def cmd_default(self):
@@ -645,6 +646,7 @@ class Scen(BayDynamo):
         extra_fields=('salinity',
                       'temp',
                       'TotalDepth',
+                      'ExtVl',
                       'Rad',
                       # minor glimpse at vertical mixing:
                       #'fractime01','fractime02','fractime08',
@@ -653,7 +655,7 @@ class Scen(BayDynamo):
                       'Chlfa',
                       'Phyt',
                       # 'AlgN','AlgP','AlgSi',
-                      'fppDiat','fppGreen', # net pri pro
+                      # dynamo only: 'fppDiat','fppGreen', # net pri pro
                       'volume',
                       'depth')
         self.map_output+=extra_fields
@@ -814,7 +816,15 @@ scen=Scen(hydro=hydro,
           stop_time=stop_time)
 scen.map_time_step=map_time_step
 
-## 
+# # 
+
+# Hack for mac:
+if 'DELFT_SRC' not in os.environ:
+    os.environ['DELFT_SRC']="/Users/rusty/sfei/conda-recipes/delwaq/src/delft3d/src"
+if 'DELFT_BIN' not in os.environ:
+    os.environ['DELFT_BIN']='/usr/local/bin'
+if 'D3D_HOME' not in os.environ:
+    os.environ['D3D_HOME']='/usr/local'
 
 scen.cmd_default()
 
@@ -863,3 +873,19 @@ scen.cmd_default()
 # RcNit 0.07 - not bad
 # Just set a shear stress - good
 # Use a constant RadSurf - not really, it's set to -999
+
+# maybe should output ExtVl - total extinction of visible light
+
+# Adding DEB based on Zhenlin's 2017082403 run:
+#  Looking through lsp:
+#     Input for [DEBGRZ_Z            ] Dynamics of DEB Zooplankton (def: active V1morphs)                
+#   it supplies some fluxes like dZ_Diat, dZ_Nres (=>NH4)
+#   dZ_Pres, dZ_Resp
+#   Zoopl_V (structural biomass), E (energy reserves) R (repro biomass), Zoopl_N (density?)
+
+# So have to add substances:
+       8  'Zoopl_V'
+       9  'Zoopl_E'
+      10  'Zoopl_R'
+      11  'Zoopl_N'
+

@@ -1042,9 +1042,6 @@ end-output
 output 'Chlfa'
    description   'Chlorophyll-a concentration'
 end-output
-output 'BLOOMGRP'
-   description   'algae group concentration'
-end-output
 output 'ExtVlBak'
    description   'background extinction visible light'
 end-output
