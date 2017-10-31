@@ -5,7 +5,13 @@ from stompy.spatial import linestring_utils
 
 from stompy import utils
 ##
+import pandas as pd
+zz_rad=pd.read_csv("zz_deb_config/RadSurfTemporal.txt",
+                   skiprows=2,names=['time','rad'],
+                   delimiter="\s+",
+                   parse_dates=['time'])
 
+## 
 usgs_ds=xr.open_dataset('usgs_cruises-2001_2016-v3.nc')
 
 # Make versions of the nutrient variables here with the same units
@@ -17,14 +23,14 @@ usgs_ds['Si']=usgs_ds['si'] * 28/1000.
 
 ##
 
-dwaq_base_path="dwaq_006"
+dwaq_base_path="dwaq_012"
 map_output=os.path.join(dwaq_base_path,"dwaq_map.nc")
 his_output=os.path.join(dwaq_base_path,"dwaq_hist.nc")
 
 map_ds=xr.open_dataset(map_output)
 his_ds=xr.open_dataset(his_output)
 
-## 
+# # 
 def find_map_cells_and_distances(map_ds):
     usgs_fine,srcs = linestring_utils.upsample_linearring(usgs_path,
                                                           200,closed_ring=0,
@@ -49,7 +55,7 @@ def find_map_cells_and_distances(map_ds):
     cell_idxs=fine_cells[order]
     return cell_idxs,cell_dists
 
-##
+# #
 
 fig_dir=os.path.join(dwaq_base_path,"figures")
 os.path.exists(fig_dir) or os.makedirs(fig_dir)
@@ -57,8 +63,7 @@ os.path.exists(fig_dir) or os.makedirs(fig_dir)
 # Generate spatial plots for each cruise,
 # and time series for each station
 
-# Per-station time series:
-def compare_station(station_num,show_map=True,fig_num=1):
+def map_cell_for_usgs_station_num(station_num):
     station_idx=np.nonzero( usgs_ds.StationNumber.values==station_num)[0][0]
     x=usgs_ds.x.values[station_idx]
     y=usgs_ds.y.values[station_idx]
@@ -67,7 +72,18 @@ def compare_station(station_num,show_map=True,fig_num=1):
     g_cc=g.cells_centroid()
     dists=utils.dist(g_cc-np.r_[x,y])
     map_cell_idx=np.argmin(dists)
+    return map_cell_idx
 
+# Per-station time series:
+def compare_station(station_num,show_map=True,fig_num=1):
+    station_idx=np.nonzero( usgs_ds.StationNumber.values==station_num)[0][0]
+    x=usgs_ds.x.values[station_idx]
+    y=usgs_ds.y.values[station_idx]
+
+    g=unstructured_grid.UnstructuredGrid.from_ugrid(map_ds)
+
+    map_cell_idx=map_cell_for_usgs_station_num(station_num)
+    
     plt.figure(fig_num).clf()
     fig,axs=plt.subplots(4,num=fig_num,sharex=True)
 
@@ -202,7 +218,7 @@ plt.colorbar(coll)
 
 # they are everywhere light limited
 # OSS is maybe 0.3 in shallows
-extvl=map_ds['ExtVlPhyt'].isel(layer=1).isel(time=300).values
+extvl=map_ds['ExtVl'].isel(layer=1).isel(time=300).values
 
 plt.figure(5).clf()
 coll=g.plot_cells(values=extvl,cmap='jet')
@@ -212,8 +228,9 @@ plt.colorbar(coll)
 # still kind of high? 
 # ExtVlFresh is adding the extra 0.97/m
 #  Is the salinity field screwed? yes!
+# after adding IM1, ExtVlISS is now 1.25, so drop ExtVlBak further
 
-
+## 
 #     ExtVl       (time, layer, face) float64 2.97 2.97 2.97 2.97 2.97 2.97 ...
 #     ExtVlBak    (time, layer, face) float64 2.0 2.0 2.0 2.0 2.0 2.0 2.0 2.0 ...
 #     ExtVlFresh  (time, layer, face) float64 0.97 0.97 0.97 0.97 0.97 0.97 ...
@@ -226,3 +243,40 @@ plt.colorbar(coll)
 #        Using constant nr139 with value: 0.970000                                                    
 
 # Time to bring in DEB zooplankton
+
+
+# Time series of zoopl
+cell=map_cell_for_usgs_station_num(27)
+
+stn_avg=map_ds.isel(face=cell).mean(dim='layer')
+##
+
+plt.figure(6).clf()
+fig,axs=plt.subplots(2,1,num=6,sharex=True)
+axs[0].plot(map_ds.time,stn_avg.Phyt,label='phyt')
+axs[0].plot(map_ds.time,stn_avg.Z_Bio,label='Z_Bio')
+
+axs[1].plot(map_ds.time,stn_avg.TIM,label='TIM')
+# axs[1].plot(map_ds.time, map_ds['Rad'].isel(face=cell).isel(layer=0))
+
+##
+# chlfa gets down to 1.5ug/l in oscillations, phyt down 0.02, zoopl_v down to 0.05
+# gC/m3 i assume.
+
+##
+
+# Initial settings are at least doing something, no oscillations, but seems to chomp
+# the phyto down too much.
+# Can I find that half-saturation grazing thing?
+# possible parameters:
+#   Yk with TIM: this is the SSC inhibition term.  TIM set to 1.0, Yk crazy high 1e6.
+#   Z_JXm               ] max ingestion rate of DEB Zooplankton                                 
+#       Using constant nr 39 with value:  450.000                                                    
+# Later - Z_kappaI - ingestion efficiency of DEB Zooplankton, could implement sloppy
+#   grazing if nutrients and chl are out of whack, but probably not the right knob
+#       [Z_Xk                ] halfrate const for food of DEB Zooplankton                            
+#       Using constant nr 41 with value: 0.250000                                                    
+
+# And somewhere there is the min biomass thing for bloom.
+# 
+##

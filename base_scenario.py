@@ -441,7 +441,13 @@ class Scen(BayDynamo):
     # base_path='dwaq_003' # osx run    
     # base_path='dwaq_004' # set outputs from .sub file
     # base_path='dwaq_005' # fix ExtVlBak 6 --> 2, and drop BLOOMGRP from outputs
-    base_path='dwaq_006' # maybe fix salinity being all 0.
+    # base_path='dwaq_006' # fix salinity being all 0.
+    # base_path='dwaq_007' # DEB first go
+    # base_path='dwaq_008' # DEB, increase Z_Xk 0.25->1
+    # base_path='dwaq_009' # DEB - set IM1=20, and Yk=50
+    # base_path='dwaq_010' # DEB. IM1=50.  Xk 1->0.5
+    #base_path='dwaq_011' # DEB. IM1=50.  Xk 0.5->1.0, more light by backing off ExtVlBak
+    base_path='dwaq_012' # output Z_Bio.  And modify bloominp to up BIOBAS by factor of 10
 
     time_step=3000 # matches the hydro
 
@@ -581,12 +587,32 @@ class Scen(BayDynamo):
             # the suntans run.
             self.src_tags.append(dict(tracer='dwaq_salt',items=ocean_items,
                                       value=33.5))
-            
+
+        self.add_deb_substances(subs)
+    
         return subs
 
-    # init_bcs() moved to waq_scenario default implementation.
-    # create_temperature_field() superceded by hydro
-    
+    def add_deb_substances(self,subs):
+        # Based on Zhenlin run 2017082403
+        subs['Zoopl_V']=Sub(initial=IC(default=0.4))
+        subs['Zoopl_E']=Sub(initial=IC(default=0.1))
+        subs['Zoopl_R']=Sub(initial=IC(default=0.0))
+        subs['Zoopl_N']=Sub(initial=IC(default=50e3))
+
+    def add_deb_parameters(self,params):
+        params['ACTIVE_DEBGRZ_Z']=1
+
+        params['Z_Lref']=5.0e-2
+        params['Z_shape']=1
+        params['Z_Pm']=480
+        params['Z_JXm']=450
+        params['Z_Kappa']=0.7
+        params['Z_Xk']=0.25 # 1=> oscillations, ZZ: 0.25 
+        params['Z_Yk']=50 # 1e6 # This is one they suggested could be changed for SSC inhibition
+        params['Z_rMor']=0.0
+        params['Z_TSi']=2.0e-3
+        
+        
     def init_parameters(self):
         # choose which processes are enabled.  Includes some
         # parameters which are not currently used.
@@ -594,8 +620,6 @@ class Scen(BayDynamo):
         
         params['NOTHREADS']=3 # better to keep it to real cores?
 
-        params['ExtVlBak']=1.5 # approx. average from USGS cruises, less dwaq corrections
-        
         params['Tolerance']=1.0e-6
         
         # if convergence becomes an issue, there *might* be more info here:
@@ -607,6 +631,9 @@ class Scen(BayDynamo):
 
         params['RadSurf']=self.radsurf()
 
+        params['ExtVlBak']=0.75 # this is becoming secondary to the IM1 effect
+        params['IM1']=50.0 # mg/l SSC ish?
+        self.add_deb_parameters(params)
         return params
         
     def cmd_default(self):
@@ -656,6 +683,7 @@ class Scen(BayDynamo):
                       'Phyt',
                       # 'AlgN','AlgP','AlgSi',
                       # dynamo only: 'fppDiat','fppGreen', # net pri pro
+                      'Z_Bio', # DEB zooplankton biomass
                       'volume',
                       'depth')
         self.map_output+=extra_fields
@@ -884,8 +912,5 @@ scen.cmd_default()
 #   Zoopl_V (structural biomass), E (energy reserves) R (repro biomass), Zoopl_N (density?)
 
 # So have to add substances:
-       8  'Zoopl_V'
-       9  'Zoopl_E'
-      10  'Zoopl_R'
-      11  'Zoopl_N'
+
 
