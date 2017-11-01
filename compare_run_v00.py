@@ -21,16 +21,26 @@ usgs_ds['NH4']=usgs_ds['nh'] *14/1000.
 usgs_ds['PO4']=usgs_ds['p'] * 31./1000.
 usgs_ds['Si']=usgs_ds['si'] * 28/1000.
 
+usgs_path=np.c_[usgs_ds.x,usgs_ds.y]
 ##
 
-dwaq_base_path="dwaq_012"
+dwaq_base_path="dwaq_025"
+# dwaq_base_path="dwaq2017082403"
 map_output=os.path.join(dwaq_base_path,"dwaq_map.nc")
 his_output=os.path.join(dwaq_base_path,"dwaq_hist.nc")
 
 map_ds=xr.open_dataset(map_output)
-his_ds=xr.open_dataset(his_output)
+# his_ds=xr.open_dataset(his_output)
+g=unstructured_grid.UnstructuredGrid.from_ugrid(map_ds)
 
-# # 
+fig_dir=os.path.join(dwaq_base_path,"figures")
+os.path.exists(fig_dir) or os.makedirs(fig_dir)
+
+##  -----------
+
+def label_fig(fig):
+    fig.text(0.02,0.9,dwaq_base_path)
+
 def find_map_cells_and_distances(map_ds):
     usgs_fine,srcs = linestring_utils.upsample_linearring(usgs_path,
                                                           200,closed_ring=0,
@@ -57,8 +67,6 @@ def find_map_cells_and_distances(map_ds):
 
 # #
 
-fig_dir=os.path.join(dwaq_base_path,"figures")
-os.path.exists(fig_dir) or os.makedirs(fig_dir)
 
 # Generate spatial plots for each cruise,
 # and time series for each station
@@ -100,7 +108,7 @@ def compare_station(station_num,show_map=True,fig_num=1):
                                     ['Chlfa','NO3','NH4','PO4','Si'] ):
 
         ax.plot( usgs_period.date, usgs_period[usgs_var].values,
-                 'go',label='USGS')
+                 'go',ms=2,label='USGS')
         ax.plot( map_ds.time,
                  map_ds[map_var].isel(face=map_cell_idx).mean(dim='layer').values,
                  'k-',label='Model')
@@ -126,6 +134,8 @@ def compare_station(station_num,show_map=True,fig_num=1):
         ax_map.xaxis.set_visible(0)
         ax_map.yaxis.set_visible(0)
 
+    label_fig(fig)
+        
     if fig_dir is not None:
         fig.savefig(os.path.join(fig_dir,"time-station%s.png"%station_num))
 
@@ -166,6 +176,8 @@ def compare_date(date,fig_num=2):
     map_date_s=utils.to_datetime(map_ds.time.values[map_time_idx]).strftime('%Y-%m-%d')
     axs[0].set_title('USGS Cruise %s  Model output %s'%(usgs_date_s,map_date_s))
 
+    label_fig(fig)
+
     if fig_dir is not None:
         fig.savefig(os.path.join(fig_dir,'cruise-%s.png'%usgs_date_s))
 
@@ -178,6 +190,39 @@ usgs_dates=usgs_ds.date[ usgs_date_sel ]
 for date in usgs_dates.values:
     compare_date(date)
 
+
+# Time series of zoopl
+def plot_station_zoopl(station_num):
+    cell=map_cell_for_usgs_station_num(station_num)
+
+    plt.figure(6).clf()
+    fig,axs=plt.subplots(2,1,num=6,sharex=True)
+    axs[0].plot(map_ds.time,
+                map_ds.Phyt.isel(face=cell).mean(dim='layer'),
+                label='phyt')
+    axs[0].plot(map_ds.time,
+                map_ds.Z_Bio.isel(face=cell).mean(dim='layer'),
+                label='Z_Bio')
+
+    axs[1].plot(map_ds.time,
+                map_ds.POC1.isel(face=cell).mean(dim='layer'),
+                label='POC1')
+    axs[1].plot(map_ds.time,
+                map_ds.POC.isel(face=cell).mean(dim='layer'),
+                label='POC')
+    axs[1].plot(map_ds.time,
+                map_ds.fSedPOC.isel(face=cell).mean(dim='layer'),
+                label='fSedPOC')
+
+    axs[0].legend()
+    axs[1].legend()
+
+    axs[0].set_ylabel('gC/m3')
+    axs[1].set_ylabel('gC/m3, gC/m2/day')
+    label_fig(fig)
+    fig.savefig(os.path.join(fig_dir,"station-%s-zoopl.png"%station_num))
+    
+plot_station_zoopl(27)
 
 
 ##
@@ -243,22 +288,8 @@ plt.colorbar(coll)
 #        Using constant nr139 with value: 0.970000                                                    
 
 # Time to bring in DEB zooplankton
-
-
-# Time series of zoopl
-cell=map_cell_for_usgs_station_num(27)
-
-stn_avg=map_ds.isel(face=cell).mean(dim='layer')
-##
-
-plt.figure(6).clf()
-fig,axs=plt.subplots(2,1,num=6,sharex=True)
-axs[0].plot(map_ds.time,stn_avg.Phyt,label='phyt')
-axs[0].plot(map_ds.time,stn_avg.Z_Bio,label='Z_Bio')
-
-axs[1].plot(map_ds.time,stn_avg.TIM,label='TIM')
-# axs[1].plot(map_ds.time, map_ds['Rad'].isel(face=cell).isel(layer=0))
-
+## 
+    
 ##
 # chlfa gets down to 1.5ug/l in oscillations, phyt down 0.02, zoopl_v down to 0.05
 # gC/m3 i assume.

@@ -31,6 +31,7 @@ except ImportError:
 
 from stompy import utils
 from stompy.model.delft import waq_scenario
+import stompy.model.delft.io as dio
 
 ##
 
@@ -446,9 +447,23 @@ class Scen(BayDynamo):
     # base_path='dwaq_008' # DEB, increase Z_Xk 0.25->1
     # base_path='dwaq_009' # DEB - set IM1=20, and Yk=50
     # base_path='dwaq_010' # DEB. IM1=50.  Xk 1->0.5
-    #base_path='dwaq_011' # DEB. IM1=50.  Xk 0.5->1.0, more light by backing off ExtVlBak
-    base_path='dwaq_012' # output Z_Bio.  And modify bloominp to up BIOBAS by factor of 10
-
+    # base_path='dwaq_011' # DEB. IM1=50.  Xk 0.5->1.0, more light by backing off ExtVlBak
+    # base_path='dwaq_012' # output Z_Bio.  And modify bloominp to up BIOBAS by factor of 10
+    # hpc
+    # base_path='dwaq_013' # output Z_Bio.  
+    # base_path='dwaq_014' # add some detritus as constant DetC, DetN, DetP, DetSi - dead end
+    # base_path='dwaq_015' # set Z_PrDet to 0.5 to allow zoop to graze detritus
+    # base_path='dwaq_016' # and add a reference mortality
+    # base_path='dwaq_017' # remove reference mortality, increase detritus
+    # base_path='dwaq_018' # can grazing rates be made smaller?
+    # base_path='dwaq_019' # split the difference.  oscillates
+    # base_path='dwaq_020' # split the difference.  oscillates    
+    # base_path='dwaq_021' # Yk up to 200, Jxm to 100.  broad peak, zoop slow, low ambient chl
+    # base_path='dwaq_022' # make ref length 50um in DEB.  they're too fast now!
+    # base_path='dwaq_023' # bump Xk up to 0.25 to slow down the zoop
+    # base_path='dwaq_024' # JXm back to default 58.5, and Yk down to 100
+    base_path='dwaq_025' # maybe that was too drastic making the zoop smaller
+    
     time_step=3000 # matches the hydro
 
     def init_substances(self):
@@ -602,15 +617,17 @@ class Scen(BayDynamo):
     def add_deb_parameters(self,params):
         params['ACTIVE_DEBGRZ_Z']=1
 
-        params['Z_Lref']=5.0e-2
+        params['Z_Lref']=2.0e-2 # ZZ 5e-2 cm (500um, compared to 20-200 for microzoo)
         params['Z_shape']=1
         params['Z_Pm']=480
-        params['Z_JXm']=450
+        params['Z_JXm']=58.5 # ZZ: 450, default is 58.5
         params['Z_Kappa']=0.7
         params['Z_Xk']=0.25 # 1=> oscillations, ZZ: 0.25 
-        params['Z_Yk']=50 # 1e6 # This is one they suggested could be changed for SSC inhibition
-        params['Z_rMor']=0.0
+        params['Z_Yk']=100 # 1e6 # This is one they suggested could be changed for SSC inhibition
+        params['Z_rMor']=0.0 # default 0.2=>more oscillations, from ZZ=0.0
         params['Z_TSi']=2.0e-3
+
+        params['Z_PrDet']=0.9  # ZZ 0.0.  0.5 decrease oscillations
         
         
     def init_parameters(self):
@@ -634,6 +651,7 @@ class Scen(BayDynamo):
         params['ExtVlBak']=0.75 # this is becoming secondary to the IM1 effect
         params['IM1']=50.0 # mg/l SSC ish?
         self.add_deb_parameters(params)
+
         return params
         
     def cmd_default(self):
