@@ -134,6 +134,9 @@ class BayDynamo(waq_scenario.Scenario):
     sub_files=['SFB_pars.sub']
     use_bloom=True
 
+    delft_path='/home/rusty/code/conda-recipes/delwaq/src/delft3d/src'
+    delft_bin='/home/rusty/code/delwaq/bin'
+
     def __init__(self,*a,**k):
         super(BayDynamo,self).__init__(*a,**k)
 
@@ -462,9 +465,29 @@ class Scen(BayDynamo):
     # base_path='dwaq_022' # make ref length 50um in DEB.  they're too fast now!
     # base_path='dwaq_023' # bump Xk up to 0.25 to slow down the zoop
     # base_path='dwaq_024' # JXm back to default 58.5, and Yk down to 100
-    base_path='dwaq_025' # maybe that was too drastic making the zoop smaller
+    # base_path='dwaq_025' # maybe that was too drastic making the zoop smaller
+    # base_path='dwaq_027'  # newly compiled dwaq with Xk as a soft limit. BAD CODE - deleted.
+    # base_path='dwaq_028'  # now with soft-Xk, return to ZZ parameters for DEB. too much grazing
+    # base_path='dwaq_029'  # bump Yk down (effective Xk increase)
+    # base_path='dwaq_030'  # return to detrital feeding at 0.9
+    # base_path='dwaq_031'  # decrease JXm to 200
+    # base_path='dwaq_032'  # decrease size by factor of 2
+    # base_path='dwaq_033'  # decrease JXm to 100
+    # base_path='dwaq_034'  # increase time step to 4 hours
+    # base_path='dwaq_035'  # decrease size again
+    # base_path='dwaq_036'  # increase Xk, slightly lower ExtVlBak
+    # base_path='dwaq_037'  # max out PrDet to 1.0
+    # base_path='dwaq_038'  # make them smaller - 50um
+    # base_path='dwaq_039'  # adding rMor
+    # base_path='dwaq_040'  # now back off on Xk - oscillate, low chl.
+    # base_path='dwaq_041'  # decrease small max ingestion rate.
+    # base_path='dwaq_042'  # maybe actually using the right delwaq now?
+    # base_path='dwaq_043'  # return to ZZ-ish deb parameters, now with the "correct" code.w
+    # base_path='dwaq_044'  # decrease deb Lref, bump up light extinction trying to get shorter, lower chlf.
+    base_path='dwaq_045'  # decrease deb Lref more.
     
-    time_step=3000 # matches the hydro
+    #time_step=3000 # matches the hydro
+    time_step=40000 #
 
     def init_substances(self):
         subs=super(Scen,self).init_substances()
@@ -617,17 +640,17 @@ class Scen(BayDynamo):
     def add_deb_parameters(self,params):
         params['ACTIVE_DEBGRZ_Z']=1
 
-        params['Z_Lref']=2.0e-2 # ZZ 5e-2 cm (500um, compared to 20-200 for microzoo)
+        params['Z_Lref']=1.0e-2 # ZZ 5e-2 cm (500um, compared to 20-200 for microzoo)
         params['Z_shape']=1
         params['Z_Pm']=480
-        params['Z_JXm']=58.5 # ZZ: 450, default is 58.5
+        params['Z_JXm']=450 # ZZ: 450, default is 58.5
         params['Z_Kappa']=0.7
         params['Z_Xk']=0.25 # 1=> oscillations, ZZ: 0.25 
-        params['Z_Yk']=100 # 1e6 # This is one they suggested could be changed for SSC inhibition
+        params['Z_Yk']=50 # 1e6 # This is one they suggested could be changed for SSC inhibition
         params['Z_rMor']=0.0 # default 0.2=>more oscillations, from ZZ=0.0
         params['Z_TSi']=2.0e-3
 
-        params['Z_PrDet']=0.9  # ZZ 0.0.  0.5 decrease oscillations
+        params['Z_PrDet']=0.0  # ZZ 0.0.  0.5 decrease oscillations
         
         
     def init_parameters(self):
@@ -644,11 +667,16 @@ class Scen(BayDynamo):
 
         params['VWIND']=3.5
 
-        params['TimMultBl']=48 # daily bloom step for a 0.5h waq step.
+        if self.time_step==40000:
+            params['TimMultBl']=6 # daily bloom step for a 4h waq step.
+        elif self.time_step==3000:
+            params['TimMultBl']=48 # daily bloom step for a 0.5h waq step.
+        else:
+            assert False
 
         params['RadSurf']=self.radsurf()
 
-        params['ExtVlBak']=0.75 # this is becoming secondary to the IM1 effect
+        params['ExtVlBak']=1.0 # this is becoming secondary to the IM1 effect
         params['IM1']=50.0 # mg/l SSC ish?
         self.add_deb_parameters(params)
 

@@ -24,7 +24,7 @@ usgs_ds['Si']=usgs_ds['si'] * 28/1000.
 usgs_path=np.c_[usgs_ds.x,usgs_ds.y]
 ##
 
-dwaq_base_path="dwaq_025"
+dwaq_base_path="dwaq_045"
 # dwaq_base_path="dwaq2017082403"
 map_output=os.path.join(dwaq_base_path,"dwaq_map.nc")
 his_output=os.path.join(dwaq_base_path,"dwaq_hist.nc")
@@ -225,6 +225,66 @@ def plot_station_zoopl(station_num):
 plot_station_zoopl(27)
 
 
+
+
+# Distance / time pcolor
+def compare_time_space(model_var='Chlfa',usgs_var='dchl',fig_num=5,vmin=0,vmax=20,
+                       log_transform=False):
+    fig=plt.figure(fig_num)
+    fig.clf()
+    fig.set_size_inches((10,6),forward=True)
+    fig,axs=plt.subplots(2,1,num=fig_num,sharex=True,sharey=True)
+
+    pad=np.timedelta64(30,'D')
+    usgs_date_sel= ( (usgs_ds.date>= map_ds.time[0] - pad ) &
+                     (usgs_ds.date<= map_ds.time[-1] + pad ) ).values
+
+    x=utils.to_dnum(usgs_ds.date.isel(date=usgs_date_sel).values)
+    y=usgs_ds.Distance_from_station_36.values
+    X,Y=np.meshgrid(x,y)
+    Z=usgs_ds[usgs_var].isel(date=usgs_date_sel)
+    if 'prof_sample' in Z.dims:
+        Z=Z.mean(dim='prof_sample')
+
+    if log_transform:
+        tran=lambda x: np.log10( np.clip(x,vmin,np.inf) )
+    else:
+        tran=lambda x: x
+        
+    scat=axs[0].scatter(X.ravel(),Y.ravel(),
+                        40,tran(Z))
+
+    map_data=(map_ds[model_var]
+              .isel(face=cell_idxs)
+              .mean(dim='layer') )
+
+    coll=axs[1].pcolormesh(map_data.time.values, cell_dists,
+                           tran(map_data.values.T.clip(vmin,np.inf)))
+
+    scat.set_clim([tran(vmin),tran(vmax)])
+    coll.set_clim([tran(vmin),tran(vmax)])
+
+    plt.colorbar(scat,ax=axs[0],label=usgs_var)
+    plt.colorbar(coll,ax=axs[1],label=model_var)
+
+    fig.tight_layout()
+    label_fig(fig)
+
+    if fig_dir is not None:
+        fig.savefig(os.path.join(fig_dir,"space-time-%s.png"%model_var))
+
+compare_time_space(model_var='Chlfa',usgs_var='dchl',fig_num=5,log_transform=True,vmin=0.1,vmax=50)
+compare_time_space(model_var='NO3',usgs_var='NO3',fig_num=6,vmax=2)
+compare_time_space(model_var='NH4',usgs_var='NH4',fig_num=7,vmax=0.5)
+compare_time_space(model_var='PO4',usgs_var='PO4',fig_num=8,vmin=-0.1,vmax=0.4)
+
+        
+
+
+
+
+
+
 ##
 
 # looking more closely at dwaq_003
@@ -311,3 +371,5 @@ plt.colorbar(coll)
 # And somewhere there is the min biomass thing for bloom.
 # 
 ##
+
+
